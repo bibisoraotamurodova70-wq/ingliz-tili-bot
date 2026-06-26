@@ -16,13 +16,13 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
 
 def run_web_server():
-    # Render o'zi bergan portni oladi (masalan, 10000), agar topilmasa 8000 ni oladi
+    # Render o'zi bergan portni oladi, topilmasa 8000 ni oladi
     port = int(os.environ.get("PORT", 8000))
     server = HTTPServer(("0.0.0.0", port), MyServer)
     print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
     server.serve_forever()
 
-# Veb serverni alohida fonda (thread) shartta ishga tushiramiz
+# Veb serverni alohida fonda (thread) ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # 2. BOT PARAMETRLARI
@@ -53,7 +53,7 @@ fake_answers = [
     "kiyim", "ko'ylak", "shim", "poyabzal", "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
     "bosh", "ko'z", "quloq", "burun", "og'iz", "tish", "qo'l", "oyoq",
     "yurak", "soch", "yuz", "bo'yin", "yona", "orqa", "qorin", "tana",
-    "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turmoq", "uxlamoq", "uyg'onmoq", "kulmoq",
+    "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turni", "uxlamoq", "uyg'onmoq", "kulmoq",
     "yig'lamoq", "gapirmoq", "tinglamoq", "ko'rmoq", "eshitmoq", "o'ylamoq", "bilmoq", "tushunmoq",
     "ochmoq", "yopmoq", "olmoq", "bermoq", "sotmoq", "sotib olmoq", "tuzatmoq", "sindirmoq",
     "chizmoq", "bo'yamoq", "yuvmoq", "tozalamoq", "pishirmoq", "yemoq", "ichmoq", "sakramoq",
@@ -74,7 +74,7 @@ def get_random_word():
 
 print("Cheksiz avtomat bot ishga tushdi...")
 
-# 3. CHEKSIZ TSIKL (BOTNING ASOSIY ISHI)
+# 3. CHEKSIZ TSIKL
 while True:
     try:
         word = get_random_word()
@@ -85,7 +85,7 @@ while True:
         # So'zni o'zbekchaga o'girish
         correct_uz = translator.translate(word).lower()
         
-        # Agar tarjimasi topilmasa yoki inglizcha so'z o'zgarmay qolsa o'tkazib yuboramiz
+        # Tarjimasi topilmasa o'tkazib yuboramiz
         if word.lower() == correct_uz:
             continue
             
@@ -112,8 +112,8 @@ while True:
         )
         print(f"Muvaffaqiyatli yuklandi: {word} -> {correct_uz}")
         
-        # Har 1 daqiqada (60 soniya) bitta test tashlaydi
-        time.sleep(120)
+        # <--- MANA SHU YERDA 5 DAQIQA (300 SONIYA) KUTADI --->
+        time.sleep(300)
         
     except Exception as e:
         print(f"Xatolik yuz berdi, 15 soniya kutiladi: {e}")
