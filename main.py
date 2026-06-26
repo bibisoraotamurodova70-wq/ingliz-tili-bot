@@ -1,10 +1,5 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-import telebot
-import time
-import requests
-import random
-from deep_translator import GoogleTranslator
 
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -19,6 +14,11 @@ def run_web_server():
 
 # Veb serverni alohida fonda ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
+import telebot
+import time
+import requests
+import random
+from deep_translator import GoogleTranslator
 
 # Siz bergan Bot Token va Kanal havolasi qo'yildi
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
@@ -107,8 +107,24 @@ while True:
         print(f"Muvaffaqiyatli yuklandi: {word} -> {correct_uz}")
         
         # Har 1 daqiqada (60 soniya) bitta test tashlaydi
-        time.sleep(120)
+        time.sleep(1)
         
     except Exception as e:
         print(f"Xatolik yuz berdi, 15 soniya kutiladi: {e}")
         time.sleep(15)
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+class MyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
+
+def run_web_server():
+    server = HTTPServer(("0.0.0.0", 8000), MyServer)
+    server.serve_forever()
+
+# Veb serverni alohida fonda ishga tushiramiz
+threading.Thread(target=run_web_server, daemon=True).start()
