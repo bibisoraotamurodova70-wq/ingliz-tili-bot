@@ -1,8 +1,24 @@
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 import telebot
 import time
 import requests
 import random
 from deep_translator import GoogleTranslator
+
+class MyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
+
+def run_web_server():
+    server = HTTPServer(("0.0.0.0", 8000), MyServer)
+    server.serve_forever()
+
+# Veb serverni alohida fonda ishga tushiramiz
+threading.Thread(target=run_web_server, daemon=True).start()
 
 # Siz bergan Bot Token va Kanal havolasi qo'yildi
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
