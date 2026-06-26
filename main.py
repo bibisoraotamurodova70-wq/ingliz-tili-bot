@@ -1,6 +1,13 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+import telebot
+import time
+import requests
+import random
+import os
+from deep_translator import GoogleTranslator
 
+# 1. RENDER UCHUN MUKAMMAL VEB SERVER QISMI
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -9,18 +16,16 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
 
 def run_web_server():
-    server = HTTPServer(("0.0.0.0", 8000), MyServer)
+    # Render o'zi bergan portni oladi (masalan, 10000), agar topilmasa 8000 ni oladi
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(("0.0.0.0", port), MyServer)
+    print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
     server.serve_forever()
 
-# Veb serverni alohida fonda ishga tushiramiz
+# Veb serverni alohida fonda (thread) shartta ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
-import telebot
-import time
-import requests
-import random
-from deep_translator import GoogleTranslator
 
-# Siz bergan Bot Token va Kanal havolasi qo'yildi
+# 2. BOT PARAMETRLARI
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
 CHAT_ID = '@testlar_bazasi_ingiliz'
 
@@ -69,6 +74,7 @@ def get_random_word():
 
 print("Cheksiz avtomat bot ishga tushdi...")
 
+# 3. CHEKSIZ TSIKL (BOTNING ASOSIY ISHI)
 while True:
     try:
         word = get_random_word()
@@ -79,7 +85,7 @@ while True:
         # So'zni o'zbekchaga o'girish
         correct_uz = translator.translate(word).lower()
         
-        # Agar tarjimasi topilmasa o'tkazib yuboramiz
+        # Agar tarjimasi topilmasa yoki inglizcha so'z o'zgarmay qolsa o'tkazib yuboramiz
         if word.lower() == correct_uz:
             continue
             
@@ -107,24 +113,8 @@ while True:
         print(f"Muvaffaqiyatli yuklandi: {word} -> {correct_uz}")
         
         # Har 1 daqiqada (60 soniya) bitta test tashlaydi
-        time.sleep(1)
+        time.sleep(120)
         
     except Exception as e:
         print(f"Xatolik yuz berdi, 15 soniya kutiladi: {e}")
         time.sleep(15)
-        from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-
-class MyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
-
-def run_web_server():
-    server = HTTPServer(("0.0.0.0", 8000), MyServer)
-    server.serve_forever()
-
-# Veb serverni alohida fonda ishga tushiramiz
-threading.Thread(target=run_web_server, daemon=True).start()
