@@ -184,7 +184,7 @@ while True:
             continue # Tsikl boshiga qaytadi
             
         # Asosiy kutish vaqti: 5 daqiqa (300 soniya)
-        time.sleep(360)
+        time.sleep(300)
         
     except Exception as e:
         print(f"Xatolik yuz berdi: {e}")
