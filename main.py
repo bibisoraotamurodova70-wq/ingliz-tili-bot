@@ -7,7 +7,7 @@ import random
 import os
 from deep_translator import GoogleTranslator
 
-# 1. RENDER UCHUN VEB SERVER QISMI
+# 1. RENDER UCHUN MUKAMMAL VEB SERVER QISMI
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -26,13 +26,14 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # 2. BOT PARAMETRLARI
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
 GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   # Guruh manzili
-CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Yangi kanal manzili
+CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Kanal manzili
 
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
 
 user_scores = {}
 poll_database = {}
+test_counter = 0  # Tashlangan testlarni sanash uchun o'zgaruvchi
 
 # Chalg'ituvchi variantlar uchun 200 ta o'zbekcha so'zlar bazasi
 fake_answers = [
@@ -73,7 +74,7 @@ def get_random_word():
     except:
         return None
 
-# 3. GURUHDA JAVOB BERGANLARNI TEKSHIRISH (Faqat guruh uchun ishlaydi, chunki kanalda anonim bo'ladi)
+# 3. GURUHDA JAVOB BERGANLARNI TEKSHIRISH
 @bot.poll_answer_handler()
 def handle_poll_answer(poll_answer):
     poll_id = poll_answer.poll_id
@@ -92,31 +93,34 @@ def handle_poll_answer(poll_answer):
                 user_scores[user_id] = {"name": full_name, "score": 0}
             user_scores[user_id]["score"] += 1
 
-# 4. /REYTING BUYRUG'I
-@bot.message_handler(commands=['reyting'])
-def send_leaderboard(message):
+# REYTINGNI MATN SHAKLIDA TAYYORLASH FUNKSIYASI
+def get_leaderboard_text():
     if not user_scores:
-        bot.reply_to(message, "📊 Hozircha guruhda hech kim ball to'plamadi.")
-        return
+        return "📊 Hozircha guruhda hech kim ball to'plamadi."
         
     sorted_users = sorted(user_scores.values(), key=lambda x: x['score'], reverse=True)
-    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi:**\n\n"
+    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi (Top 10):**\n\n"
     medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
     
     for index, user in enumerate(sorted_users[:10], start=1):
         place_text = medals.get(index, f"🔹 {index}-o'rin")
         leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
-        
-    bot.send_message(message.chat.id, leaderboard_text, parse_mode="Markdown")
+    return leaderboard_text
+
+# 4. /REYTING BUYRUG'I (Qo'lda tekshirish uchun ham qoldi)
+@bot.message_handler(commands=['reyting'])
+def send_leaderboard(message):
+    text = get_leaderboard_text()
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 def start_polling():
     bot.infinity_polling(skip_pending=True)
 
 threading.Thread(target=start_polling, daemon=True).start()
 
-print("Bot guruh va kanal uchun parallel rejimda ishga tushdi...")
+print("Bot guruh va kanal uchun reyting va tanaffus tizimi bilan ishga tushdi...")
 
-# 5. TESTLARNI HAR 5 DAQIQADA HAM GURUHGA, HAM KANALGA YUBORISH
+# 5. ASOSIY ISH TSIKLI
 while True:
     try:
         word = get_random_word()
@@ -136,7 +140,7 @@ while True:
         random.shuffle(options)
         correct_index = options.index(correct_uz)
         
-        # A) GURUHGA YUBORISH (Ochiq test - reyting hisoblanishi uchun)
+        # GURUHGA YUBORISH
         group_poll = bot.send_poll(
             chat_id=GROUP_CHAT_ID,
             question=word,
@@ -145,10 +149,9 @@ while True:
             correct_option_id=correct_index,
             is_anonymous=False
         )
-        # Guruh test ID sini bazaga qo'shamiz
         poll_database[group_poll.poll.id] = correct_index
         
-        # B) KANALGA YUBORISH (Kanal qoidasiga ko'ra avtomat anonim bo'ladi)
+        # KANALGA YUBORISH
         bot.send_poll(
             chat_id=CHANNEL_CHAT_ID,
             question=word,
@@ -157,10 +160,31 @@ while True:
             correct_option_id=correct_index
         )
         
-        print(f"Muvaffaqiyatli guruh va kanalga yuklandi: {word} -> {correct_uz}")
+        test_counter += 1  # Testni bittaga oshiramiz
+        print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
         
-        # 5 daqiqa (300 soniya) kutish
-        time.sleep(420)
+        # AGAR 30 TA TEST BO'LGAN BO'LSA
+        if test_counter >= 30:
+            time.sleep(10) # Oxirgi testni yechib olishlari uchun 10 soniya kutamiz
+            
+            # 1. Avtomatik reyting jadvalini guruhga tashlaymiz
+            reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
+            bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
+            
+            # 2. Tanaffus haqida xabar beramiz
+            bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Biroz dam oling!**")
+            
+            # Sanoqni qayta nollaymiz
+            test_counter = 0
+            
+            # 15 daqiqa (900 soniya) tanaffus qilib uxlaydi
+            time.sleep(900)
+            
+            bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
+            continue # Tsikl boshiga qaytadi
+            
+        # Asosiy kutish vaqti: 5 daqiqa (300 soniya)
+        time.sleep(360)
         
     except Exception as e:
         print(f"Xatolik yuz berdi: {e}")
