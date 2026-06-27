@@ -7,7 +7,7 @@ import random
 import os
 from deep_translator import GoogleTranslator
 
-# 1. RENDER UCHUN MUKAMMAL VEB SERVER QISMI
+# 1. RENDER UCHUN VEB SERVER QISMI
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -16,21 +16,23 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
 
 def run_web_server():
-    # Render o'zi bergan portni oladi, topilmasa 8000 ni oladi
     port = int(os.environ.get("PORT", 8000))
     server = HTTPServer(("0.0.0.0", port), MyServer)
     print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
     server.serve_forever()
 
-# Veb serverni alohida fonda (thread) ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # 2. BOT PARAMETRLARI
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
-CHAT_ID = '@testlar_bazasi_ingiliz'
+GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   # Guruh manzili
+CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Yangi kanal manzili
 
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
+
+user_scores = {}
+poll_database = {}
 
 # Chalg'ituvchi variantlar uchun 200 ta o'zbekcha so'zlar bazasi
 fake_answers = [
@@ -53,7 +55,7 @@ fake_answers = [
     "kiyim", "ko'ylak", "shim", "poyabzal", "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
     "bosh", "ko'z", "quloq", "burun", "og'iz", "tish", "qo'l", "oyoq",
     "yurak", "soch", "yuz", "bo'yin", "yona", "orqa", "qorin", "tana",
-    "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turni", "uxlamoq", "uyg'onmoq", "kulmoq",
+    "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turmoq", "uxlamoq", "uyg'onmoq", "kulmoq",
     "yig'lamoq", "gapirmoq", "tinglamoq", "ko'rmoq", "eshitmoq", "o'ylamoq", "bilmoq", "tushunmoq",
     "ochmoq", "yopmoq", "olmoq", "bermoq", "sotmoq", "sotib olmoq", "tuzatmoq", "sindirmoq",
     "chizmoq", "bo'yamoq", "yuvmoq", "tozalamoq", "pishirmoq", "yemoq", "ichmoq", "sakramoq",
@@ -64,7 +66,6 @@ fake_answers = [
 ]
 
 def get_random_word():
-    """Internetdan tasodifiy inglizcha so'z oladi"""
     try:
         response = requests.get("https://random-word-api.herokuapp.com/word?number=1")
         if response.status_code == 200:
@@ -72,9 +73,50 @@ def get_random_word():
     except:
         return None
 
-print("Cheksiz avtomat bot ishga tushdi...")
+# 3. GURUHDA JAVOB BERGANLARNI TEKSHIRISH (Faqat guruh uchun ishlaydi, chunki kanalda anonim bo'ladi)
+@bot.poll_answer_handler()
+def handle_poll_answer(poll_answer):
+    poll_id = poll_answer.poll_id
+    user_id = poll_answer.user.id
+    
+    first_name = poll_answer.user.first_name
+    last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
+    full_name = f"{first_name} {last_name}".strip()
+    
+    if poll_id in poll_database:
+        correct_id = poll_database[poll_id]
+        user_answers = poll_answer.option_ids
+        
+        if user_answers and user_answers[0] == correct_id:
+            if user_id not in user_scores:
+                user_scores[user_id] = {"name": full_name, "score": 0}
+            user_scores[user_id]["score"] += 1
 
-# 3. CHEKSIZ TSIKL
+# 4. /REYTING BUYRUG'I
+@bot.message_handler(commands=['reyting'])
+def send_leaderboard(message):
+    if not user_scores:
+        bot.reply_to(message, "📊 Hozircha guruhda hech kim ball to'plamadi.")
+        return
+        
+    sorted_users = sorted(user_scores.values(), key=lambda x: x['score'], reverse=True)
+    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi:**\n\n"
+    medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
+    
+    for index, user in enumerate(sorted_users[:10], start=1):
+        place_text = medals.get(index, f"🔹 {index}-o'rin")
+        leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
+        
+    bot.send_message(message.chat.id, leaderboard_text, parse_mode="Markdown")
+
+def start_polling():
+    bot.infinity_polling(skip_pending=True)
+
+threading.Thread(target=start_polling, daemon=True).start()
+
+print("Bot guruh va kanal uchun parallel rejimda ishga tushdi...")
+
+# 5. TESTLARNI HAR 5 DAQIQADA HAM GURUHGA, HAM KANALGA YUBORISH
 while True:
     try:
         word = get_random_word()
@@ -82,39 +124,44 @@ while True:
             time.sleep(10)
             continue
             
-        # So'zni o'zbekchaga o'girish
         correct_uz = translator.translate(word).lower()
-        
-        # Tarjimasi topilmasa o'tkazib yuboramiz
         if word.lower() == correct_uz:
             continue
             
-        # 3 ta noto'g'ri variant tanlash
         wrong_options = random.sample(fake_answers, 3)
-        
         if correct_uz in wrong_options:
             continue
             
-        # Variantlarni birlashtirish va aralashtirish
         options = wrong_options + [correct_uz]
         random.shuffle(options)
-        
         correct_index = options.index(correct_uz)
         
-        # Telegramga Quiz yuborish
-        bot.send_poll(
-            chat_id=CHAT_ID,
+        # A) GURUHGA YUBORISH (Ochiq test - reyting hisoblanishi uchun)
+        group_poll = bot.send_poll(
+            chat_id=GROUP_CHAT_ID,
             question=word,
             options=options,
             type='quiz',
             correct_option_id=correct_index,
-            is_anonymous=True
+            is_anonymous=False
         )
-        print(f"Muvaffaqiyatli yuklandi: {word} -> {correct_uz}")
+        # Guruh test ID sini bazaga qo'shamiz
+        poll_database[group_poll.poll.id] = correct_index
         
-        # <--- MANA SHU YERDA 5 DAQIQA (300 SONIYA) KUTADI --->
-        time.sleep(300)
+        # B) KANALGA YUBORISH (Kanal qoidasiga ko'ra avtomat anonim bo'ladi)
+        bot.send_poll(
+            chat_id=CHANNEL_CHAT_ID,
+            question=word,
+            options=options,
+            type='quiz',
+            correct_option_id=correct_index
+        )
+        
+        print(f"Muvaffaqiyatli guruh va kanalga yuklandi: {word} -> {correct_uz}")
+        
+        # 5 daqiqa (300 soniya) kutish
+        time.sleep(420)
         
     except Exception as e:
-        print(f"Xatolik yuz berdi, 15 soniya kutiladi: {e}")
+        print(f"Xatolik yuz berdi: {e}")
         time.sleep(15)
