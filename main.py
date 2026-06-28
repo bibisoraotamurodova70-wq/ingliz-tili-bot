@@ -186,7 +186,7 @@ while True:
             continue
             
         # Asosiy kutish vaqti: 5 daqiqa (300 soniya)
-        time.sleep(2)
+        time.sleep(30)
         
     except Exception as e:
         print(f"Xatolik yuz berdi: {e}")
