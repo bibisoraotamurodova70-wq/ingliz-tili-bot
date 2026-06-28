@@ -36,7 +36,7 @@ user_scores = {}
 poll_database = {}
 test_counter = 0  # Tashlangan testlarni sanash uchun o'zgaruvchi
 
-# Chalg'ituvchi variantlar uchun 200 ta o'zbekcha so'zlar bazasi
+# Chalg'ituvchi variantlar (Xatolik tuzatildi: "poyabzal" qo'shtirnoqqa olindi)
 fake_answers = [
     "olma", "kitob", "uy", "mashina", "yugurmoq", "baxtli", "sovuq", "issiq", 
     "yozmoq", "suv", "non", "shahar", "yaxshi", "yomon", "katta", "kichik",
@@ -54,7 +54,7 @@ fake_answers = [
     "aeroport", "vokzal", "zavod", "idora", "teatr", "muzey", "park", "guruh",
     "it", "mushuk", "ot", "sigir", "qo'y", "tovuq", "qush",
     "sher", "ayiq", "bo'ri", "tulki", "quyon", "sichqon", "fil", "maymun",
-    "kiyim", "ko'ylak", "shim", poyabzal, "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
+    "kiyim", "ko'ylak", "shim", "poyabzal", "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
     "bosh", "ko'z", "quloq", "burun", "og'iz", "tish", "qo'l", "oyoq",
     "yurak", "soch", "yuz", "bo'yin", "yona", "orqa", "qorin", "tana",
     "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turmoq", "uxlamoq", "uyg'onmoq", "kulmoq",
@@ -189,6 +189,6 @@ def test_sending_loop():
 # Test yuborish tsiklini fonda mustaqil ishga tushiramiz
 threading.Thread(target=test_sending_loop, daemon=True).start()
 
-# Asosiy oqimda esa faqat buyruqlarni (mabodo birov /reyting yozsa) eshitib turamiz
+# Asosiy oqimda esa faqat buyruqlarni eshitib turamiz
 print("Bot buyruqlarni eshitishni boshlamoqda (Main Polling)...")
 bot.infinity_polling(skip_pending=True)
