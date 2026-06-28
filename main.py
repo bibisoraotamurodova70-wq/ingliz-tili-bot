@@ -107,7 +107,7 @@ def get_leaderboard_text():
         leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
     return leaderboard_text
 
-# 4. /REYTING BUYRUG'I (Qo'lda tekshirish uchun ham qoldi)
+# 4. /REYTING BUYRUG'I
 @bot.message_handler(commands=['reyting'])
 def send_leaderboard(message):
     text = get_leaderboard_text()
@@ -118,7 +118,7 @@ def start_polling():
 
 threading.Thread(target=start_polling, daemon=True).start()
 
-print("Bot guruh va kanal uchun reyting va tanaffus tizimi bilan ishga tushdi...")
+print("Bot obuna bo'lish eslatmasi bilan birga ishga tushdi...")
 
 # 5. ASOSIY ISH TSIKLI
 while True:
@@ -160,31 +160,33 @@ while True:
             correct_option_id=correct_index
         )
         
-        test_counter += 1  # Testni bittaga oshiramiz
+        test_counter += 1
         print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
         
-        # AGAR 30 TA TEST BO'LGAN BO'LSA
+        # <--- REKLAMA: HAR 3 TA TESTDAN KEYIN GURUHGA OBUNA BO'LISH MATNINI YUBORISH --->
+        if test_counter % 3 == 0 and test_counter < 30:
+            time.sleep(1) # Test tushganidan biroz keyin chiqishi uchun
+            reklama_matni = "📢 **Turnirimiz rasmiy kanalida ham davom etmoqda!**\n👉 Yangiliklar va qo'shimcha testlar uchun kanalimizga a'zo bo'ling: @ingiliz_turnir"
+            bot.send_message(GROUP_CHAT_ID, reklama_matni, parse_mode="Markdown")
+        
+        # AGAR 30 TA TEST BO'LGAN BO'LSA (TURNIR YAKUNI)
         if test_counter >= 30:
-            time.sleep(10) # Oxirgi testni yechib olishlari uchun 10 soniya kutamiz
+            time.sleep(10)
             
-            # 1. Avtomatik reyting jadvalini guruhga tashlaymiz
             reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
             bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
             
-            # 2. Tanaffus haqida xabar beramiz
-            bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Biroz dam oling!**")
+            # Bu yerda ham kanal eslatmasini kuchaytiramiz
+            bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
             
-            # Sanoqni qayta nollaymiz
             test_counter = 0
-            
-            # 15 daqiqa (900 soniya) tanaffus qilib uxlaydi
             time.sleep(900)
             
             bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
-            continue # Tsikl boshiga qaytadi
+            continue
             
         # Asosiy kutish vaqti: 5 daqiqa (300 soniya)
-        time.sleep(300)
+        time.sleep(180)
         
     except Exception as e:
         print(f"Xatolik yuz berdi: {e}")
