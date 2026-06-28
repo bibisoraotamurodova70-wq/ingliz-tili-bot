@@ -7,7 +7,7 @@ import random
 import os
 from deep_translator import GoogleTranslator
 
-# 1. RENDER UCHUN MUKAMMAL VEB SERVER QISMI
+# 1. RENDER UCHUN VEB SERVER QISMI
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -21,6 +21,7 @@ def run_web_server():
     print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
     server.serve_forever()
 
+# Veb serverni alohida fonda ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # 2. BOT PARAMETRLARI
@@ -53,7 +54,7 @@ fake_answers = [
     "aeroport", "vokzal", "zavod", "idora", "teatr", "muzey", "park", "guruh",
     "it", "mushuk", "ot", "sigir", "qo'y", "tovuq", "qush",
     "sher", "ayiq", "bo'ri", "tulki", "quyon", "sichqon", "fil", "maymun",
-    "kiyim", "ko'ylak", "shim", "poyabzal", "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
+    "kiyim", "ko'ylak", "shim", poyabzal, "shlyapa", "qo'lqop", "ko'zoynak", "uzuk",
     "bosh", "ko'z", "quloq", "burun", "og'iz", "tish", "qo'l", "oyoq",
     "yurak", "soch", "yuz", "bo'yin", "yona", "orqa", "qorin", "tana",
     "yurmoq", "kelmoq", "ketmoq", "o'tirmoq", "turmoq", "uxlamoq", "uyg'onmoq", "kulmoq",
@@ -113,81 +114,81 @@ def send_leaderboard(message):
     text = get_leaderboard_text()
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-def start_polling():
-    bot.infinity_polling(skip_pending=True)
+# 5. ASOSIY TEST TASHLOVCHI TSIKLNI ALOHIDA OQIMGA OLAMIZ
+def test_sending_loop():
+    global test_counter
+    print("Test yuborish oqimi (Thread) ishga tushdi...")
+    while True:
+        try:
+            word = get_random_word()
+            if not word:
+                time.sleep(10)
+                continue
+                
+            correct_uz = translator.translate(word).lower()
+            if word.lower() == correct_uz:
+                continue
+                
+            wrong_options = random.sample(fake_answers, 3)
+            if correct_uz in wrong_options:
+                continue
+                
+            options = wrong_options + [correct_uz]
+            random.shuffle(options)
+            correct_index = options.index(correct_uz)
+            
+            # GURUHGA YUBORISH
+            group_poll = bot.send_poll(
+                chat_id=GROUP_CHAT_ID,
+                question=word,
+                options=options,
+                type='quiz',
+                correct_option_id=correct_index,
+                is_anonymous=False
+            )
+            poll_database[group_poll.poll.id] = correct_index
+            
+            # KANALGA YUBORISH
+            bot.send_poll(
+                chat_id=CHANNEL_CHAT_ID,
+                question=word,
+                options=options,
+                type='quiz',
+                correct_option_id=correct_index
+            )
+            
+            test_counter += 1
+            print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
+            
+            # REKLAMA: HAR 3 TA TESTDAN KEYIN
+            if test_counter % 3 == 0 and test_counter < 30:
+                time.sleep(1)
+                reklama_matni = "📢 **Turnirimiz rasmiy kanalida ham davom etmoqda!**\n👉 Yangiliklar va qo'shimcha testlar uchun kanalimizga a'zo bo'ling: @ingiliz_turnir"
+                bot.send_message(GROUP_CHAT_ID, reklama_matni, parse_mode="Markdown")
+            
+            # TURNIR YAKUNI: 30 TA TESTDAN KEYIN
+            if test_counter >= 30:
+                time.sleep(10)
+                
+                reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
+                bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
+                bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
+                
+                test_counter = 0
+                time.sleep(900) # 15 daqiqa tanaffus
+                
+                bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
+                continue
+                
+            time.sleep(300) # 5 daqiqa kutish
+            
+        except Exception as e:
+            print(f"Xatolik yuz berdi: {e}")
+            time.sleep(15)
 
-threading.Thread(target=start_polling, daemon=True).start()
+# Test yuborish tsiklini fonda mustaqil ishga tushiramiz
+threading.Thread(target=test_sending_loop, daemon=True).start()
 
-print("Bot obuna bo'lish eslatmasi bilan birga ishga tushdi...")
-
-# 5. ASOSIY ISH TSIKLI
-while True:
-    try:
-        word = get_random_word()
-        if not word:
-            time.sleep(10)
-            continue
-            
-        correct_uz = translator.translate(word).lower()
-        if word.lower() == correct_uz:
-            continue
-            
-        wrong_options = random.sample(fake_answers, 3)
-        if correct_uz in wrong_options:
-            continue
-            
-        options = wrong_options + [correct_uz]
-        random.shuffle(options)
-        correct_index = options.index(correct_uz)
-        
-        # GURUHGA YUBORISH
-        group_poll = bot.send_poll(
-            chat_id=GROUP_CHAT_ID,
-            question=word,
-            options=options,
-            type='quiz',
-            correct_option_id=correct_index,
-            is_anonymous=False
-        )
-        poll_database[group_poll.poll.id] = correct_index
-        
-        # KANALGA YUBORISH
-        bot.send_poll(
-            chat_id=CHANNEL_CHAT_ID,
-            question=word,
-            options=options,
-            type='quiz',
-            correct_option_id=correct_index
-        )
-        
-        test_counter += 1
-        print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
-        
-        # <--- REKLAMA: HAR 3 TA TESTDAN KEYIN GURUHGA OBUNA BO'LISH MATNINI YUBORISH --->
-        if test_counter % 3 == 0 and test_counter < 30:
-            time.sleep(1) # Test tushganidan biroz keyin chiqishi uchun
-            reklama_matni = "📢 **Turnirimiz rasmiy kanalida ham davom etmoqda!**\n👉 Yangiliklar va qo'shimcha testlar uchun kanalimizga a'zo bo'ling: @ingiliz_turnir"
-            bot.send_message(GROUP_CHAT_ID, reklama_matni, parse_mode="Markdown")
-        
-        # AGAR 30 TA TEST BO'LGAN BO'LSA (TURNIR YAKUNI)
-        if test_counter >= 30:
-            time.sleep(10)
-            
-            reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
-            bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
-            
-            # Bu yerda ham kanal eslatmasini kuchaytiramiz
-            bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
-            
-            test_counter = 0
-            time.sleep(900)
-            
-            bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
-            continue
-            
-        # Asosiy kutish vaqti: 5 daqiqa (300 soniya)
-        time.sleep(30)
-        
-    except Exception as e:
-        print(f"Xatolik yuz berdi: {e}")
-        time.sleep(15)
+# Asosiy oqimda esa faqat buyruqlarni (mabodo birov /reyting yozsa) eshitib turamiz
+print("Bot buyruqlarni eshitishni boshlamoqda (Main Polling)...")
+bot.infinity_polling(skip_pending=True)
