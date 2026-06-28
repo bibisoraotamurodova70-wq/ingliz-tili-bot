@@ -180,7 +180,7 @@ def test_sending_loop():
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(300) # 5 daqiqa kutish
+            time.sleep(60) # 5 daqiqa kutish
             
         except Exception as e:
             print(f"Xatolik yuz berdi: {e}")
