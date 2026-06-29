@@ -183,7 +183,7 @@ def test_sending_loop():
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(300)  # Har 5 daqiqada yangi test
+            time.sleep(60)  # Har 5 daqiqada yangi test
             
         except Exception as e:
             print(f"Test yuborishda xatolik: {e}")
