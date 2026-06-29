@@ -1,47 +1,31 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-import telebot
-import time
-import requests
-import random
 import os
+import json
+import threading
+import time
+import random
+import requests
+import telebot
+from flask import Flask, request
 from deep_translator import GoogleTranslator
 
-# 1. RENDER UCHUN VEB SERVER QISMI
-class MyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(bytes("Bot ishlamoqda!", "utf-8"))
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 8000))
-    server = HTTPServer(("0.0.0.0", port), MyServer)
-    print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
-    server.serve_forever()
-
-threading.Thread(target=run_web_server, daemon=True).start()
-
-# 2. BOT PARAMETRLARI
+# 1. BOT PARAMETRLARI
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
 GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   # Guruh manzili
 CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Kanal manzili
 
+# Render'dagi ilovangiz manzili (oxirida / belgisiz bo'lsin)
+# DIQQAT: Agar render manzilingiz boshqacha bo'lsa, buni almashtiring!
+RENDER_URL = "https://ingiliz-tili-testlar.onrender.com" 
+
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
-
-# Eski Webhook muammosini hal qilish
-try:
-    bot.delete_webhook()
-    print("Eski Webhook o'chirildi.")
-except Exception as e:
-    print(f"Webhook o'chirishda xatolik: {e}")
+app = Flask(__name__)
 
 user_scores = {}
 poll_database = {}  
 test_counter = 0  
 
+# Chalg'ituvchi variantlar bazasi
 fake_answers = [
     "olma", "kitob", "uy", "mashina", "yugurmoq", "baxtli", "sovuq", "issiq", 
     "yozmoq", "suv", "non", "shahar", "yaxshi", "yomon", "katta", "kichik",
@@ -80,7 +64,31 @@ def get_random_word():
     except:
         return None
 
-# 3. JAVOB BERGANLARNI TEKSHIRISH
+# REYTING MATNI (TOP 20)
+def get_leaderboard_text():
+    if not user_scores:
+        return "📊 Hozircha guruhda hech kim ball to'plamadi."
+    sorted_users = sorted(user_scores.values(), key=lambda x: x['score'], reverse=True)
+    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi (Top 20):**\n\n"
+    medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
+    for index, user in enumerate(sorted_users[:20], start=1):
+        place_text = medals.get(index, f"🔹 {index}-o'rin")
+        leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
+    return leaderboard_text
+
+# 2. WEBHOOK ORQALI KELADIGAN TELEGRAM SO'ROVLARI
+@app.route(f"/{API_TOKEN}", methods=['POST'])
+def get_message():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/", methods=['GET'])
+def index():
+    return "Bot muvaffaqiyatli Webhook rejimida ishlamoqda!", 200
+
+# 3. JAVOB BERGANLARNI TEKSHIRISH (WEBHOOK REJIMIDA DARHOL ISHLAYDI)
 @bot.poll_answer_handler()
 def handle_poll_answer(poll_answer):
     try:
@@ -99,24 +107,9 @@ def handle_poll_answer(poll_answer):
                 if user_id not in user_scores:
                     user_scores[user_id] = {"name": full_name, "score": 0}
                 user_scores[user_id]["score"] += 1
-                print(f"[BALL MUVAFFAQIYATLI] {full_name} to'g'ri topdi! Ball: {user_scores[user_id]['score']}")
+                print(f"[WEBHOOK BALL] {full_name} to'g'ri topdi! Jami: {user_scores[user_id]['score']}")
     except Exception as e:
-        print(f"[XATOLIK] Poll handlerda: {e}")
-
-# REYTING MATNI (TOP 20)
-def get_leaderboard_text():
-    if not user_scores:
-        return "📊 Hozircha guruhda hech kim ball to'plamadi."
-        
-    sorted_users = sorted(user_scores.values(), key=lambda x: x['score'], reverse=True)
-    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi (Top 20):**\n\n"
-    
-    medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
-    
-    for index, user in enumerate(sorted_users[:20], start=1):
-        place_text = medals.get(index, f"🔹 {index}-o'rin")
-        leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
-    return leaderboard_text
+        print(f"Poll handlerda xato: {e}")
 
 # 4. /REYTING BUYRUG'I
 @bot.message_handler(commands=['reyting'])
@@ -124,10 +117,11 @@ def send_leaderboard(message):
     text = get_leaderboard_text()
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# 5. ASOSIY TEST TASHLOVCHI TSIKL
+# 5. ASOSIY TEST TASHLOVCHI TSIKL (ALOHIDA OQIMDA)
 def test_sending_loop():
     global test_counter, poll_database
-    print("Test yuborish oqimi ishga tushdi...")
+    time.sleep(5)  # Server to'liq ishga tushishi uchun ozgina kutamiz
+    print("Test yuborish oqimi fonda muvaffaqiyatli ish boshladi...")
     while True:
         try:
             word = get_random_word()
@@ -147,7 +141,7 @@ def test_sending_loop():
             random.shuffle(options)
             correct_index = options.index(correct_uz)
             
-            # GURUHGA YUBORISH (Oshkora rejimda)
+            # GURUHGA YUBORISH
             group_poll = bot.send_poll(
                 chat_id=GROUP_CHAT_ID,
                 question=word,
@@ -169,37 +163,46 @@ def test_sending_loop():
             poll_database[channel_poll.poll.id] = correct_index
             
             test_counter += 1
-            print(f"Test #{test_counter} yuklandi: {word}")
+            print(f"Test #{test_counter} guruhga va kanalga muvaffaqiyatli yuborildi.")
             
-            # REKLAMA: HAR 3 TA TESTDAN KEYIN
+            # REKLAMA
             if test_counter % 3 == 0 and test_counter < 30:
                 time.sleep(1)
                 reklama_matni = "📢 **Turnirimiz rasmiy kanalida ham davom etmoqda!**\n👉 Yangiliklar va qo'shimcha testlar uchun kanalimizga a'zo bo'ling: @ingiliz_turnir"
                 bot.send_message(GROUP_CHAT_ID, reklama_matni, parse_mode="Markdown")
             
-            # TURNIR YAKUNI: 30 TA TEST
+            # TURNIR YAKUNI (30 ta testdan so'ng)
             if test_counter >= 30:
-                time.sleep(15)
+                time.sleep(20) # Oxirgi test javoblarini qabul qilish uchun kutish
+                
                 reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
                 bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
                 bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
                 
                 poll_database.clear()
                 test_counter = 0
-                time.sleep(900)
+                time.sleep(900)  # 15 daqiqa tanaffus
                 
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(60)
+            time.sleep(60)  # 5 daqiqa kutish
             
         except Exception as e:
-            print(f"[XATOLIK] Test tsiklida: {e}")
+            print(f"Test yuborishda xatolik: {e}")
             time.sleep(15)
 
-# Oqimni ishga tushirish
-threading.Thread(target=test_sending_loop, daemon=True).start()
-
-# MUHIM: Telegram botga poll_answer hodisalarini majburiy qabul qilishni buyuramiz
-print("Bot buyruqlarni va test javoblarini eshitmoqda...")
-bot.infinity_polling(skip_pending=True, allowed_updates=['message', 'poll_answer'])
+# Webhookni Telegram tizimida faollashtirish va serverni yurgizish
+if __name__ == "__main__":
+    bot.remove_webhook()
+    time.sleep(1)
+    # Telegramga webhook manzilini o'rnatamiz
+    bot.set_webhook(url=f"{RENDER_URL}/{API_TOKEN}", allowed_updates=['message', 'poll_answer'])
+    print("Telegram Webhook muvaffaqiyatli o'rnatildi!")
+    
+    # Test oqimini yurgizamiz
+    threading.Thread(target=test_sending_loop, daemon=True).start()
+    
+    # Flask veb serverni Render taqdim etgan portda ishga tushiramiz
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
