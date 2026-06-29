@@ -31,15 +31,15 @@ CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Kanal manzili
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
 
-# Webhook xatoligini oldini olish
+# Eski Webhook muammosini hal qilish
 try:
     bot.delete_webhook()
-    print("Eski Webhook muvaffaqiyatli o'chirildi.")
+    print("Eski Webhook o'chirildi.")
 except Exception as e:
-    print(f"Webhookni o'chirishda xatolik: {e}")
+    print(f"Webhook o'chirishda xatolik: {e}")
 
 user_scores = {}
-poll_database = {}  # Ikkala test ID sini ham saqlash uchun baza
+poll_database = {}  
 test_counter = 0  
 
 fake_answers = [
@@ -80,7 +80,7 @@ def get_random_word():
     except:
         return None
 
-# 3. GURUH VA KANALDA JAVOB BERGANLARNI TEKSHIRISH
+# 3. JAVOB BERGANLARNI TEKSHIRISH
 @bot.poll_answer_handler()
 def handle_poll_answer(poll_answer):
     try:
@@ -91,8 +91,6 @@ def handle_poll_answer(poll_answer):
         last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
         full_name = f"{first_name} {last_name}".strip()
         
-        # Bot faqat guruhdagi reytingni hisoblashi uchun kanaldan kelgan ovozlarni filtrlash ham mumkin, 
-        # lekin biz hozir bazada bor-yo'qligini tekshiramiz:
         if poll_id in poll_database:
             correct_id = poll_database[poll_id]
             user_answers = poll_answer.option_ids
@@ -101,11 +99,11 @@ def handle_poll_answer(poll_answer):
                 if user_id not in user_scores:
                     user_scores[user_id] = {"name": full_name, "score": 0}
                 user_scores[user_id]["score"] += 1
-                print(f"[BALL MUVAFFAQIYATLI] {full_name} to'g'ri topdi! Jami: {user_scores[user_id]['score']}")
+                print(f"[BALL MUVAFFAQIYATLI] {full_name} to'g'ri topdi! Ball: {user_scores[user_id]['score']}")
     except Exception as e:
-        print(f"[XATOLIK] Poll handlerda muammo: {e}")
+        print(f"[XATOLIK] Poll handlerda: {e}")
 
-# REYTINGNI MATN SHAKLIDA TAYYORLASH (TOP 20)
+# REYTING MATNI (TOP 20)
 def get_leaderboard_text():
     if not user_scores:
         return "📊 Hozircha guruhda hech kim ball to'plamadi."
@@ -129,7 +127,7 @@ def send_leaderboard(message):
 # 5. ASOSIY TEST TASHLOVCHI TSIKL
 def test_sending_loop():
     global test_counter, poll_database
-    print("Test yuborish oqimi (Thread) ishga tushdi...")
+    print("Test yuborish oqimi ishga tushdi...")
     while True:
         try:
             word = get_random_word()
@@ -149,7 +147,7 @@ def test_sending_loop():
             random.shuffle(options)
             correct_index = options.index(correct_uz)
             
-            # A) GURUHGA YUBORISH
+            # GURUHGA YUBORISH (Oshkora rejimda)
             group_poll = bot.send_poll(
                 chat_id=GROUP_CHAT_ID,
                 question=word,
@@ -158,10 +156,9 @@ def test_sending_loop():
                 correct_option_id=correct_index,
                 is_anonymous=False
             )
-            # Guruh test ID sini bazaga yozamiz
             poll_database[group_poll.poll.id] = correct_index
             
-            # B) KANALGA YUBORISH
+            # KANALGA YUBORISH
             channel_poll = bot.send_poll(
                 chat_id=CHANNEL_CHAT_ID,
                 question=word,
@@ -169,11 +166,10 @@ def test_sending_loop():
                 type='quiz',
                 correct_option_id=correct_index
             )
-            # Kanal test ID sini ham bazaga yozamiz (adashib ketmaslik uchun)
             poll_database[channel_poll.poll.id] = correct_index
             
             test_counter += 1
-            print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
+            print(f"Test #{test_counter} yuklandi: {word}")
             
             # REKLAMA: HAR 3 TA TESTDAN KEYIN
             if test_counter % 3 == 0 and test_counter < 30:
@@ -181,29 +177,29 @@ def test_sending_loop():
                 reklama_matni = "📢 **Turnirimiz rasmiy kanalida ham davom etmoqda!**\n👉 Yangiliklar va qo'shimcha testlar uchun kanalimizga a'zo bo'ling: @ingiliz_turnir"
                 bot.send_message(GROUP_CHAT_ID, reklama_matni, parse_mode="Markdown")
             
-            # TURNIR YAKUNI: 30 TA TESTDAN KEYIN
+            # TURNIR YAKUNI: 30 TA TEST
             if test_counter >= 30:
                 time.sleep(15)
-                
                 reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
                 bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
                 bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
                 
                 poll_database.clear()
                 test_counter = 0
-                time.sleep(900) # 15 daqiqa tanaffus
+                time.sleep(900)
                 
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(60) # 5 daqiqa kutish
+            time.sleep(60)
             
         except Exception as e:
-            print(f"[XATOLIK] Test yuborish tsiklida: {e}")
+            print(f"[XATOLIK] Test tsiklida: {e}")
             time.sleep(15)
 
-# Test yuborish oqimini fonda mustaqil yurgizamiz
+# Oqimni ishga tushirish
 threading.Thread(target=test_sending_loop, daemon=True).start()
 
-print("Bot buyruqlarni eshitishni boshlamoqda...")
-bot.infinity_polling(skip_pending=True)
+# MUHIM: Telegram botga poll_answer hodisalarini majburiy qabul qilishni buyuramiz
+print("Bot buyruqlarni va test javoblarini eshitmoqda...")
+bot.infinity_polling(skip_pending=True, allowed_updates=['message', 'poll_answer'])
