@@ -31,7 +31,7 @@ CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Kanal manzili
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
 
-# MUHIM: Webhook xatoligini oldini olish uchun uni srazu o'chiramiz!
+# Webhook xatoligini oldini olish
 try:
     bot.delete_webhook()
     print("Eski Webhook muvaffaqiyatli o'chirildi.")
@@ -39,8 +39,8 @@ except Exception as e:
     print(f"Webhookni o'chirishda xatolik: {e}")
 
 user_scores = {}
-poll_database = {}
-test_counter = 0  # Tashlangan testlarni sanash uchun
+poll_database = {}  # Ikkala test ID sini ham saqlash uchun baza
+test_counter = 0  
 
 fake_answers = [
     "olma", "kitob", "uy", "mashina", "yugurmoq", "baxtli", "sovuq", "issiq", 
@@ -80,7 +80,7 @@ def get_random_word():
     except:
         return None
 
-# 3. GURUHDA JAVOB BERGANLARNI TEKSHIRISH
+# 3. GURUH VA KANALDA JAVOB BERGANLARNI TEKSHIRISH
 @bot.poll_answer_handler()
 def handle_poll_answer(poll_answer):
     try:
@@ -91,6 +91,8 @@ def handle_poll_answer(poll_answer):
         last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
         full_name = f"{first_name} {last_name}".strip()
         
+        # Bot faqat guruhdagi reytingni hisoblashi uchun kanaldan kelgan ovozlarni filtrlash ham mumkin, 
+        # lekin biz hozir bazada bor-yo'qligini tekshiramiz:
         if poll_id in poll_database:
             correct_id = poll_database[poll_id]
             user_answers = poll_answer.option_ids
@@ -99,9 +101,9 @@ def handle_poll_answer(poll_answer):
                 if user_id not in user_scores:
                     user_scores[user_id] = {"name": full_name, "score": 0}
                 user_scores[user_id]["score"] += 1
-                print(f"[BALL] {full_name} to'g'ri topdi! Jami balli: {user_scores[user_id]['score']}")
+                print(f"[BALL MUVAFFAQIYATLI] {full_name} to'g'ri topdi! Jami: {user_scores[user_id]['score']}")
     except Exception as e:
-        print(f"[XATOLIK] Poll handler ichida: {e}")
+        print(f"[XATOLIK] Poll handlerda muammo: {e}")
 
 # REYTINGNI MATN SHAKLIDA TAYYORLASH (TOP 20)
 def get_leaderboard_text():
@@ -113,7 +115,7 @@ def get_leaderboard_text():
     
     medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
     
-    for index, user in enumerate(sorted_users[:20], start=1): # TOP 20
+    for index, user in enumerate(sorted_users[:20], start=1):
         place_text = medals.get(index, f"🔹 {index}-o'rin")
         leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
     return leaderboard_text
@@ -147,7 +149,7 @@ def test_sending_loop():
             random.shuffle(options)
             correct_index = options.index(correct_uz)
             
-            # GURUHGA YUBORISH
+            # A) GURUHGA YUBORISH
             group_poll = bot.send_poll(
                 chat_id=GROUP_CHAT_ID,
                 question=word,
@@ -156,16 +158,19 @@ def test_sending_loop():
                 correct_option_id=correct_index,
                 is_anonymous=False
             )
+            # Guruh test ID sini bazaga yozamiz
             poll_database[group_poll.poll.id] = correct_index
             
-            # KANALGA YUBORISH
-            bot.send_poll(
+            # B) KANALGA YUBORISH
+            channel_poll = bot.send_poll(
                 chat_id=CHANNEL_CHAT_ID,
                 question=word,
                 options=options,
                 type='quiz',
                 correct_option_id=correct_index
             )
+            # Kanal test ID sini ham bazaga yozamiz (adashib ketmaslik uchun)
+            poll_database[channel_poll.poll.id] = correct_index
             
             test_counter += 1
             print(f"Test #{test_counter} yuklandi: {word} -> {correct_uz}")
@@ -197,7 +202,7 @@ def test_sending_loop():
             print(f"[XATOLIK] Test yuborish tsiklida: {e}")
             time.sleep(15)
 
-# Test yuborish tsiklini fonda ishga tushiramiz
+# Test yuborish oqimini fonda mustaqil yurgizamiz
 threading.Thread(target=test_sending_loop, daemon=True).start()
 
 print("Bot buyruqlarni eshitishni boshlamoqda...")
