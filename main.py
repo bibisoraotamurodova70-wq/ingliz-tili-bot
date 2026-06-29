@@ -21,7 +21,6 @@ def run_web_server():
     print(f"Veb-server {port}-portda muvaffaqiyatli ishga tushdi.")
     server.serve_forever()
 
-# Veb serverni alohida fonda ishga tushiramiz
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # 2. BOT PARAMETRLARI
@@ -32,11 +31,17 @@ CHANNEL_CHAT_ID = '@ingiliz_turnir'         # Kanal manzili
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
 
+# MUHIM: Webhook xatoligini oldini olish uchun uni srazu o'chiramiz!
+try:
+    bot.delete_webhook()
+    print("Eski Webhook muvaffaqiyatli o'chirildi.")
+except Exception as e:
+    print(f"Webhookni o'chirishda xatolik: {e}")
+
 user_scores = {}
 poll_database = {}
-test_counter = 0  # Tashlangan testlarni sanash uchun o'zgaruvchi
+test_counter = 0  # Tashlangan testlarni sanash uchun
 
-# Chalg'ituvchi variantlar (Xatolik tuzatildi: "poyabzal" qo'shtirnoqqa olindi)
 fake_answers = [
     "olma", "kitob", "uy", "mashina", "yugurmoq", "baxtli", "sovuq", "issiq", 
     "yozmoq", "suv", "non", "shahar", "yaxshi", "yomon", "katta", "kichik",
@@ -78,32 +83,37 @@ def get_random_word():
 # 3. GURUHDA JAVOB BERGANLARNI TEKSHIRISH
 @bot.poll_answer_handler()
 def handle_poll_answer(poll_answer):
-    poll_id = poll_answer.poll_id
-    user_id = poll_answer.user.id
-    
-    first_name = poll_answer.user.first_name
-    last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
-    full_name = f"{first_name} {last_name}".strip()
-    
-    if poll_id in poll_database:
-        correct_id = poll_database[poll_id]
-        user_answers = poll_answer.option_ids
+    try:
+        poll_id = poll_answer.poll_id
+        user_id = poll_answer.user.id
         
-        if user_answers and user_answers[0] == correct_id:
-            if user_id not in user_scores:
-                user_scores[user_id] = {"name": full_name, "score": 0}
-            user_scores[user_id]["score"] += 1
+        first_name = poll_answer.user.first_name if poll_answer.user.first_name else "Foydalanuvchi"
+        last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
+        full_name = f"{first_name} {last_name}".strip()
+        
+        if poll_id in poll_database:
+            correct_id = poll_database[poll_id]
+            user_answers = poll_answer.option_ids
+            
+            if user_answers and user_answers[0] == correct_id:
+                if user_id not in user_scores:
+                    user_scores[user_id] = {"name": full_name, "score": 0}
+                user_scores[user_id]["score"] += 1
+                print(f"[BALL] {full_name} to'g'ri topdi! Jami balli: {user_scores[user_id]['score']}")
+    except Exception as e:
+        print(f"[XATOLIK] Poll handler ichida: {e}")
 
-# REYTINGNI MATN SHAKLIDA TAYYORLASH FUNKSIYASI
+# REYTINGNI MATN SHAKLIDA TAYYORLASH (TOP 20)
 def get_leaderboard_text():
     if not user_scores:
         return "📊 Hozircha guruhda hech kim ball to'plamadi."
         
     sorted_users = sorted(user_scores.values(), key=lambda x: x['score'], reverse=True)
-    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi (Top 10):**\n\n"
+    leaderboard_text = "📊 **Guruhdagi eng bilimdonlar reytingi (Top 20):**\n\n"
+    
     medals = {1: "🥇 1-o'rin", 2: "🥈 2-o'rin", 3: "🥉 3-o'rin"}
     
-    for index, user in enumerate(sorted_users[:10], start=1):
+    for index, user in enumerate(sorted_users[:20], start=1): # TOP 20
         place_text = medals.get(index, f"🔹 {index}-o'rin")
         leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
     return leaderboard_text
@@ -114,9 +124,9 @@ def send_leaderboard(message):
     text = get_leaderboard_text()
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# 5. ASOSIY TEST TASHLOVCHI TSIKLNI ALOHIDA OQIMGA OLAMIZ
+# 5. ASOSIY TEST TASHLOVCHI TSIKL
 def test_sending_loop():
-    global test_counter
+    global test_counter, poll_database
     print("Test yuborish oqimi (Thread) ishga tushdi...")
     while True:
         try:
@@ -168,27 +178,27 @@ def test_sending_loop():
             
             # TURNIR YAKUNI: 30 TA TESTDAN KEYIN
             if test_counter >= 30:
-                time.sleep(10)
+                time.sleep(15)
                 
                 reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
                 bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
                 bot.send_message(GROUP_CHAT_ID, "⏳ **Navbatdagi turnir 15 daqiqadan so'ng boshlanadi. Ungacha @ingiliz_turnir kanalimizga o'tib obuna bo'lib turing!**")
                 
+                poll_database.clear()
                 test_counter = 0
                 time.sleep(900) # 15 daqiqa tanaffus
                 
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(60) # 5 daqiqa kutish
+            time.sleep(300) # 5 daqiqa kutish
             
         except Exception as e:
-            print(f"Xatolik yuz berdi: {e}")
+            print(f"[XATOLIK] Test yuborish tsiklida: {e}")
             time.sleep(15)
 
-# Test yuborish tsiklini fonda mustaqil ishga tushiramiz
+# Test yuborish tsiklini fonda ishga tushiramiz
 threading.Thread(target=test_sending_loop, daemon=True).start()
 
-# Asosiy oqimda esa faqat buyruqlarni eshitib turamiz
-print("Bot buyruqlarni eshitishni boshlamoqda (Main Polling)...")
+print("Bot buyruqlarni eshitishni boshlamoqda...")
 bot.infinity_polling(skip_pending=True)
