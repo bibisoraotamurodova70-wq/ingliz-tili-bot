@@ -60,7 +60,7 @@ def get_random_word():
     except:
         return None
 
-# REYTING MATNI
+# REYTING JADVALINI TAYYORLASH
 def get_leaderboard_text():
     if not user_scores:
         return "📊 Hozircha guruhda hech kim to'g'ri javob berib ball to'plamadi."
@@ -72,51 +72,59 @@ def get_leaderboard_text():
         leaderboard_text += f"{place_text}: {user['name']} — {user['score']} ball\n"
     return leaderboard_text
 
-# 2. WEBHOOK ORQALI KELADIGAN HAR QANDAY SIGNALNI TO'G'RIDAN-TO'G'RI O'QISH
+# 2. WEBHOOK ORQALI KELAYOTGAN BARCHA SO'ROVLAR
 @app.route(f"/{API_TOKEN}", methods=['POST'])
 def get_message():
-    global user_scores
     try:
-        data = request.get_json()
-        if not data:
-            return "!", 200
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
             
-        # OVOZ BERISH SIGNALI KELSA (Kafolatlangan qism)
-        if "poll_answer" in data:
-            poll_answer = data["poll_answer"]
-            poll_id = poll_answer["poll_id"]
-            user_info = poll_answer["user"]
-            user_id = user_info["id"]
+            # AGAR SINOVDAN O'TISH NATIJASI KELSA (Kafolatlangan yangi usul)
+            if update.poll:
+                poll_id = update.poll.id
+                if poll_id in poll_database:
+                    correct_id = poll_database[poll_id]
+                    # To'g'ri javob variantidagi odamlar sonini tekshirish
+                    options = update.poll.options
+                    voters_count = options[correct_id].voter_count
+                    print(f"[POLL) Test {poll_id} yangilandi. To'g'ri topganlar soni: {voters_count}")
             
-            first_name = user_info.get("first_name", "Foydalanuvchi")
-            last_name = user_info.get("last_name", "")
-            full_name = f"{first_name} {last_name}".strip()
-            
-            selected_options = poll_answer.get("option_ids", [])
-            
-            if poll_id in poll_database and selected_options:
-                correct_id = poll_database[poll_id]
-                # Agar foydalanuvchi to'g'ri variantni tanlagan bo'lsa
-                if selected_options[0] == correct_id:
-                    if user_id not in user_scores:
-                        user_scores[user_id] = {"name": full_name, "score": 0}
-                    user_scores[user_id]["score"] += 1
-                    print(f"🔥 [FLASK BALL] {full_name} ball oldi! Jami: {user_scores[user_id]['score']}")
-
-        # MATNLI XABARLAR KELSA (/reyting kabi komandalar)
-        elif "message" in data:
-            update = telebot.types.Update.de_json(data)
             bot.process_new_updates([update])
-            
+            return "!", 200
     except Exception as e:
-        print(f"Webhook ma'lumotida xatolik: {e}")
+        print(f"Webhook xatosi: {e}")
     return "!", 200
 
 @app.route("/", methods=['GET'])
 def index():
-    return "Bot 100% barqaror rejimda ishlamoqda!", 200
+    return "Bot muvaffaqiyatli ishlamoqda!", 200
 
-# 3. /REYTING BUYRUG'I
+# 3. KAFOLATLANGAN FOYDALANUVCHILARNI RO'YXATGA OLISH (TUZATILDI)
+@bot.poll_answer_handler()
+def handle_poll_answer(poll_answer):
+    global user_scores
+    try:
+        poll_id = poll_answer.poll_id
+        user_id = poll_answer.user.id
+        
+        first_name = poll_answer.user.first_name if poll_answer.user.first_name else "Bilimdon"
+        last_name = poll_answer.user.last_name if poll_answer.user.last_name else ""
+        full_name = f"{first_name} {last_name}".strip()
+        
+        if poll_id in poll_database:
+            correct_id = poll_database[poll_id]
+            user_answers = poll_answer.option_ids
+            
+            if user_answers and user_answers[0] == correct_id:
+                if user_id not in user_scores:
+                    user_scores[user_id] = {"name": full_name, "score": 0}
+                user_scores[user_id]["score"] += 1
+                print(f"✅ [BALL QO'SHILDI] {full_name} — {user_scores[user_id]['score']} ball")
+    except Exception as e:
+        print(f"Ovoz hisoblashda xato: {e}")
+
+# 4. /REYTING BUYRUG'I
 @bot.message_handler(commands=['reyting'])
 def send_leaderboard(message):
     try:
@@ -125,11 +133,11 @@ def send_leaderboard(message):
     except Exception as e:
         print(f"Reyting jo'natishda xato: {e}")
 
-# 4. ASOSIY TEST TASHLOVCHI TSIKL
+# 5. ASOSIY TEST TASHLOVCHI TSIKL
 def test_sending_loop():
     global test_counter, poll_database
     time.sleep(5)  
-    print("Test yuborish oqimi ishga tushdi...")
+    print("Testlar yuborilishi boshlandi...")
     while True:
         try:
             word = get_random_word()
@@ -149,28 +157,23 @@ def test_sending_loop():
             random.shuffle(options)
             correct_index = options.index(correct_uz)
             
-            # GURUHGA TEST TASHLOVCHI
+            # GURUHGA TEST TASHLOVCHI (Ochiq ovoz berish)
             group_poll = bot.send_poll(
                 chat_id=GROUP_CHAT_ID,
-                question=word,
+                question=f"🇬🇧 {word} — so'zining tarjimasini toping:",
                 options=options,
                 type='quiz',
                 correct_option_id=correct_index,
-                is_anonymous=False
+                is_anonymous=False  # Odamlar ismi ko'rinishi shart!
             )
             poll_database[group_poll.poll.id] = correct_index
             
             test_counter += 1
-            print(f"Test #{test_counter} muvaffaqiyatli guruhga chiqdi.")
+            print(f"Test #{test_counter} guruhga yuborildi.")
             
-            # REKLAMA
-            if test_counter % 3 == 0 and test_counter < 30:
-                time.sleep(1)
-                bot.send_message(GROUP_CHAT_ID, "📢 **Do'stlaringizni ham guruhga taklif qiling va bilimdonlar turnirida g'olib bo'ling!**")
-            
-            # TURNIR YAKUNI
+            # 30 TA TEST TUGAGANDA REYTINGNI CHIQARISH
             if test_counter >= 30:
-                time.sleep(20) 
+                time.sleep(15) 
                 
                 reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
                 bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
@@ -178,12 +181,12 @@ def test_sending_loop():
                 
                 poll_database.clear()
                 test_counter = 0
-                time.sleep(900)  # 15 daqiqa dam
+                time.sleep(900)  # 15 daqiqa kutish
                 
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk testlar yo'lda...**")
                 continue
                 
-            time.sleep(60)  # Har 5 daqiqa
+            time.sleep(60)  # Har 5 daqiqada bitta test
             
         except Exception as e:
             print(f"Test yuborishda xatolik: {e}")
@@ -192,9 +195,12 @@ def test_sending_loop():
 if __name__ == "__main__":
     bot.remove_webhook()
     time.sleep(1)
-    # Telegramga webhook ulash (Barcha signallarni birga olish)
-    bot.set_webhook(url=f"{RENDER_URL}/{API_TOKEN}", allowed_updates=['message', 'poll_answer'])
-    print("Yangi Mustahkam Webhook o'rnatildi!")
+    # Webhook ulanishini sozlash (barcha yangilanishlar bilan)
+    bot.set_webhook(
+        url=f"{RENDER_URL}/{API_TOKEN}", 
+        allowed_updates=['message', 'poll', 'poll_answer']
+    )
+    print("Yangi mukammal Webhook o'rnatildi!")
     
     threading.Thread(target=test_sending_loop, daemon=True).start()
     
