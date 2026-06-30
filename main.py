@@ -94,7 +94,7 @@ def get_random_word():
     except:
         return None
 
-# 3. WEBHOOK SHLYUZI (404 XATOSI STRATEGIK TUZATILDI)
+# 3. WEBHOOK SHLYUZI (Tizim asosi)
 @app.route("/", methods=['POST', 'GET'])
 def index():
     if request.method == 'POST':
@@ -108,7 +108,7 @@ def index():
             print(f"Webhook xatosi: {e}")
         return "!", 200
     else:
-        return "Bot tizimi muvaffaqiyatli ishga tushdi va 404 muammosi hal qilindi!", 200
+        return "Bot tizimi muvaffaqiyatli ishlamoqda!", 200
 
 # 4. TUGMA BOSILGANDA ISHLOVCHI QISM
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
@@ -227,12 +227,12 @@ def test_sending_loop():
 if __name__ == "__main__":
     bot.remove_webhook()
     time.sleep(1)
-    # Bosh sahifaning o'ziga to'g'ridan-to'g'ri webhook o'rnatdik (404 xatosini yo'qotadi)
+    
     bot.set_webhook(
         url=f"{RENDER_URL}/", 
         allowed_updates=["message", "callback_query"]
     )
-    print("Yangi to'g'rilangan Webhook ishga tushdi!")
+    print("Webhook muvaffaqiyatli o'rnatildi!")
     
     threading.Thread(target=test_sending_loop, daemon=True).start()
     
