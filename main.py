@@ -23,8 +23,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, score INTEGER DEFAULT 0)')
-    # Endi bazada test yuborilgan vaqtni ham saqlaymiz (created_at)
-    cursor.execute('CREATE TABLE IF NOT EXISTS active_tests (message_id INTEGER PRIMARY KEY, correct_answer TEXT, created_at REAL)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS active_tests (message_id INTEGER PRIMARY KEY, correct_answer TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS solved_tests (user_id INTEGER, message_id INTEGER, PRIMARY KEY (user_id, message_id))')
     conn.commit()
     conn.close()
@@ -69,7 +68,7 @@ def get_random_word():
         if response.status_code == 200: return response.json()[0].capitalize()
     except: return None
 
-# 3. TUGMALAR ISHLOVCHISI (ADOLATLI VAQT NAZORATI)
+# 3. TUGMALAR ISHLOVCHISI (VAQT CHEKLOVISIZ)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     conn = None
@@ -84,28 +83,22 @@ def handle_answer(call):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # 1. Testni oldin bosganmi tekshirish
+        # 1. Foydalanuvchi bu testni oldin bosganmi tekshiramiz
         cursor.execute("SELECT 1 FROM solved_tests WHERE user_id = ? AND message_id = ?", (user_id, message_id))
         if cursor.fetchone():
             bot.answer_callback_query(call.id, "⚠️ Siz bu testga javob berib bo'lgansiz! Faqat 1 marta urinish mumkin.", show_alert=True)
             return
             
-        # 2. Test bazada bormi va qachon yaratilganini olish
-        cursor.execute("SELECT correct_answer, created_at FROM active_tests WHERE message_id = ?", (message_id,))
+        # 2. Test bazada mavjudligini tekshiramiz
+        cursor.execute("SELECT correct_answer FROM active_tests WHERE message_id = ?", (message_id,))
         row = cursor.fetchone()
         if not row:
-            bot.answer_callback_query(call.id, "⚠️ Bu test muddati mutlaqo tugagan!")
+            bot.answer_callback_query(call.id, "⚠️ Bu test eskirgan yoki bazadan o'chirilgan!")
             return
             
-        correct_answer, created_at = row[0], row[1]
+        correct_answer = row[0]
         
-        # 3. VAQTNI TEKSHIRISH (Hozirgi vaqt - yaratilgan vaqt)
-        # Agar savol berilganiga 30 soniyadan ko'p bo'lgan bo'lsa, qabul qilmaydi
-        if time.time() - created_at > 30:
-            bot.answer_callback_query(call.id, f"⏰ Kech qoldingiz! Javob berish uchun 30 soniya berilgan edi.\nTo'g'ri javob: {correct_answer.capitalize()}", show_alert=True)
-            return
-            
-        # Javob berdi deb yozib qo'yamiz
+        # Urinishni srazu yopamiz (qayta bosa olmaydi)
         cursor.execute("INSERT INTO solved_tests (user_id, message_id) VALUES (?, ?)", (user_id, message_id))
         conn.commit()
         
@@ -125,7 +118,7 @@ def send_leaderboard(message):
     try: bot.reply_to(message, get_leaderboard_text(), parse_mode="Markdown")
     except Exception as e: print(f"Reyting xatosi: {e}")
 
-# 5. TEST TSIKLI (Xavfsiz va serverni zo'riqtirmaydigan rejim)
+# 5. TEST TSIKLI (VAQTSIDAN TOZA HOLATDA)
 def test_sending_loop():
     global IS_LOOP_RUNNING
     if IS_LOOP_RUNNING: return
@@ -148,24 +141,23 @@ def test_sending_loop():
             markup = InlineKeyboardMarkup(row_width=2)
             markup.add(*[InlineKeyboardButton(text=opt.capitalize(), callback_data=f"ans_{opt}") for opt in options])
             
-            # Xabarda tinchgina 30 soniya vaqt borligi yoziladi, xabar har soniyada tahrirlanib odamlarni asbiylashtirmaydi
+            # Matndan vaqt haqidagi barcha yozuvlarni olib tashladik
             msg = bot.send_message(
                 chat_id=GROUP_CHAT_ID, 
-                text=f"🇬🇧 **{word}** — so'zining to'g'ri tarjimasini toping:\n\n⏱ *Javob berish vaqti: 30 soniya*", 
+                text=f"🇬🇧 **{word}** — so'zining to'g'ri tarjimasini toping:", 
                 reply_markup=markup, 
                 parse_mode="Markdown"
             )
             
-            # Bazaga xabarning aniq vaqtini (time.time()) yozib qo'yamiz
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO active_tests (message_id, correct_answer, created_at) VALUES (?, ?, ?)", (msg.message_id, correct_uz, time.time()))
+            cursor.execute("INSERT INTO active_tests (message_id, correct_answer) VALUES (?, ?)", (msg.message_id, correct_uz))
             conn.commit()
             conn.close()
             
             test_counter += 1
             if test_counter >= 30:
-                time.sleep(35)
+                time.sleep(30)
                 bot.send_message(GROUP_CHAT_ID, "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text(), parse_mode="Markdown")
                 test_counter = 0
                 time.sleep(900)
@@ -181,5 +173,5 @@ if __name__ == "__main__":
     time.sleep(2)
     
     threading.Thread(target=test_sending_loop, daemon=True).start()
-    print("Bot eng adolatli va tinch rejimda ishga tushdi...")
+    print("Bot vaqt cheklovlarisiz ishga tushdi...")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
