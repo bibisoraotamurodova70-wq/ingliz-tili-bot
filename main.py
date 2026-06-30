@@ -20,11 +20,10 @@ app = Flask(__name__)
 
 DB_FILE = "bot_database.db"
 
-# 2. BAZANI SOZLACH (Hamma yecha olishi uchun)
+# 2. BAZANI SOZLACH
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # Foydalanuvchilar ballari
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -32,14 +31,12 @@ def init_db():
             score INTEGER DEFAULT 0
         )
     ''')
-    # Faol testlar jadvali
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS active_tests (
             message_id INTEGER PRIMARY KEY,
             correct_answer TEXT
         )
     ''')
-    # Kim qaysi testni yechganini tekshirish (Takroran ball olmaslik uchun)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS solved_tests (
             user_id INTEGER,
@@ -52,7 +49,6 @@ def init_db():
 
 init_db()
 
-# Ball qo'shish funksiyasi
 def add_score(user_id, name):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -68,7 +64,6 @@ def add_score(user_id, name):
     conn.close()
     return new_score
 
-# Reyting matni
 def get_leaderboard_text():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -114,9 +109,9 @@ def get_message():
 
 @app.route("/", methods=['GET'])
 def index():
-    return "Bot universal rejimda faol!", 200
+    return "Bot 1 daqiqalik rejimda faol!", 200
 
-# 4. HAR BIR FOYDALANUVCHINI ALOHIDA TEKSHIRIB BALL BERISH
+# 4. CALLBACK HANDLER
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     try:
@@ -128,7 +123,6 @@ def handle_answer(call):
         message_id = call.message.message_id
         selected_answer = call.data.split("ans_")[1]
         
-        # 1. Foydalanuvchi bu testni oldin yechganmi yoki yo'qmi tekshiramiz
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM solved_tests WHERE user_id = ? AND message_id = ?", (user_id, message_id))
@@ -139,7 +133,6 @@ def handle_answer(call):
             conn.close()
             return
             
-        # 2. Testning to'g'ri javobini bazadan tekshiramiz
         cursor.execute("SELECT correct_answer FROM active_tests WHERE message_id = ?", (message_id,))
         row = cursor.fetchone()
         
@@ -150,14 +143,11 @@ def handle_answer(call):
             
         correct_answer = row[0]
         
-        # 3. Javobni tekshirish
         if selected_answer == correct_answer:
-            # Foydalanuvchini yechganlar ro'yxatiga qo'shamiz (bloklaymiz)
             cursor.execute("INSERT INTO solved_tests (user_id, message_id) VALUES (?, ?)", (user_id, message_id))
             conn.commit()
             conn.close()
             
-            # Ball qo'shish
             current_score = add_score(user_id, full_name)
             bot.answer_callback_query(call.id, f"🎉 To'g'ri topdingiz!\nSizning jami ballingiz: {current_score} taga yetdi.", show_alert=True)
         else:
@@ -176,11 +166,11 @@ def send_leaderboard(message):
     except Exception as e:
         print(f"Reyting xatosi: {e}")
 
-# 6. ASOSIY TEST TSIKLI (TESTLAR OCHIQ TURAVERADI)
+# 6. ASOSIY TEST TSIKLI (1 DAQIQA REJIMIGA O'TKAZILDI)
 def test_sending_loop():
     time.sleep(5)
     test_counter = 0
-    print("Ko'p foydalanuvchili test tizimi ishga tushdi...")
+    print("1 daqiqalik test tizimi ishga tushdi...")
     while True:
         try:
             word = get_random_word()
@@ -203,7 +193,6 @@ def test_sending_loop():
             buttons = [InlineKeyboardButton(text=opt.capitalize(), callback_data=f"ans_{opt}") for opt in options]
             markup.add(*buttons)
             
-            # Guruhga test yuboriladi
             msg = bot.send_message(
                 chat_id=GROUP_CHAT_ID,
                 text=f"🇬🇧 **{word}** — so'zining to'g'ri tarjimasini toping:",
@@ -211,7 +200,6 @@ def test_sending_loop():
                 parse_mode="Markdown"
             )
             
-            # Faol testni bazaga saqlaymiz (ochiq turaveradi)
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
             cursor.execute("INSERT INTO active_tests (message_id, correct_answer) VALUES (?, ?)", (msg.message_id, correct_uz))
@@ -221,7 +209,6 @@ def test_sending_loop():
             test_counter += 1
             print(f"Test #{test_counter} guruhga yuborildi.")
             
-            # 30 TA TEST TUGAGANDA REYTING CHIQARISH
             if test_counter >= 30:
                 time.sleep(30)
                 reyting_matni = "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text()
@@ -232,7 +219,8 @@ def test_sending_loop():
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk savollar yo'lda...**")
                 continue
                 
-            time.sleep(60) # Har 5 daqiqada bitta yangi test
+            # SHU JOYI 300 DAN 60 GA O'ZGARTIRILDI (1 DAQIQA)
+            time.sleep(60) 
             
         except Exception as e:
             print(f"Tsikl xatosi: {e}")
@@ -242,7 +230,7 @@ if __name__ == "__main__":
     bot.remove_webhook()
     time.sleep(1)
     bot.set_webhook(url=f"{RENDER_URL}/{API_TOKEN}", allowed_updates=['message', 'callback_query'])
-    print("Universal Webhook o'rnatildi!")
+    print("Webhook muvaffaqiyatli sozlandi!")
     
     threading.Thread(target=test_sending_loop, daemon=True).start()
     
