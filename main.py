@@ -94,24 +94,23 @@ def get_random_word():
     except:
         return None
 
-# 3. WEBHOOK SHLYUZI
-@app.route(f"/{API_TOKEN}", methods=['POST'])
-def get_message():
-    try:
-        if request.headers.get('content-type') == 'application/json':
-            json_string = request.get_data().decode('utf-8')
-            update = telebot.types.Update.de_json(json_string)
-            bot.process_new_updates([update])
-            return "!", 200
-    except Exception as e:
-        print(f"Webhook xatosi: {e}")
-    return "!", 200
-
-@app.route("/", methods=['GET'])
+# 3. WEBHOOK SHLYUZI (404 XATOSI STRATEGIK TUZATILDI)
+@app.route("/", methods=['POST', 'GET'])
 def index():
-    return "Bot muvaffaqiyatli ishlamoqda!", 200
+    if request.method == 'POST':
+        try:
+            if request.headers.get('content-type') == 'application/json':
+                json_string = request.get_data().decode('utf-8')
+                update = telebot.types.Update.de_json(json_string)
+                bot.process_new_updates([update])
+                return "!", 200
+        except Exception as e:
+            print(f"Webhook xatosi: {e}")
+        return "!", 200
+    else:
+        return "Bot tizimi muvaffaqiyatli ishga tushdi va 404 muammosi hal qilindi!", 200
 
-# 4. TUGMALARNI CHIDAMLI ISHLOVCHISI (KAFOLATLANDI)
+# 4. TUGMA BOSILGANDA ISHLOVCHI QISM
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     conn = None
@@ -127,7 +126,6 @@ def handle_answer(call):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # O'ynaganini tekshirish
         cursor.execute("SELECT 1 FROM solved_tests WHERE user_id = ? AND message_id = ?", (user_id, message_id))
         already_solved = cursor.fetchone()
         
@@ -135,7 +133,6 @@ def handle_answer(call):
             bot.answer_callback_query(call.id, "⚠️ Siz bu testga javob berib bo'lgansiz!", show_alert=True)
             return
             
-        # To'g'ri javobni olish
         cursor.execute("SELECT correct_answer FROM active_tests WHERE message_id = ?", (message_id,))
         row = cursor.fetchone()
         
@@ -149,7 +146,6 @@ def handle_answer(call):
             cursor.execute("INSERT INTO solved_tests (user_id, message_id) VALUES (?, ?)", (user_id, message_id))
             conn.commit()
             
-            # Ball qo'shish
             current_score = add_score(user_id, full_name)
             bot.answer_callback_query(call.id, f"🎉 To'g'ri topdingiz!\nSizning jami ballingiz: {current_score} taga yetdi.", show_alert=True)
         else:
@@ -157,10 +153,6 @@ def handle_answer(call):
             
     except Exception as e:
         print(f"Callback xatosi: {e}")
-        try:
-            bot.answer_callback_query(call.id, "⚠️ Tizimda yuklama yuqori, qayta urunib ko'ring!")
-        except:
-            pass
     finally:
         if conn:
             conn.close()
@@ -174,11 +166,11 @@ def send_leaderboard(message):
     except Exception as e:
         print(f"Reyting xatosi: {e}")
 
-# 6. ASOSIY TEST TSIKLI (1 DAQIQA)
+# 6. TEST YUBORISH TSIKLI (1 DAQIQA)
 def test_sending_loop():
     time.sleep(5)
     test_counter = 0
-    print("1 daqiqalik test tizimi faol...")
+    print("Test yuborish boshlandi...")
     while True:
         try:
             word = get_random_word()
@@ -222,28 +214,25 @@ def test_sending_loop():
                 bot.send_message(GROUP_CHAT_ID, reyting_matni, parse_mode="Markdown")
                 
                 test_counter = 0
-                time.sleep(900)  # 15 daqiqa tanaffus
+                time.sleep(900)
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk savollar yo'lda...**")
                 continue
                 
-            time.sleep(60) # 1 daqiqa
+            time.sleep(60)
             
         except Exception as e:
             print(f"Tsikl xatosi: {e}")
             time.sleep(15)
 
 if __name__ == "__main__":
-    try:
-        bot.remove_webhook()
-        time.sleep(1)
-        # BU YERDA KAFOLATLANGAN WEBHOOK SOZLANMASI (allowed_updates qo'shildi)
-        bot.set_webhook(
-            url=f"{RENDER_URL}/{API_TOKEN}", 
-            allowed_updates=["message", "callback_query"]
-        )
-        print("Webhook muvaffaqiyatli sozlandi!")
-    except Exception as e:
-        print(f"Webhook o'rnatishda xato: {e}")
+    bot.remove_webhook()
+    time.sleep(1)
+    # Bosh sahifaning o'ziga to'g'ridan-to'g'ri webhook o'rnatdik (404 xatosini yo'qotadi)
+    bot.set_webhook(
+        url=f"{RENDER_URL}/", 
+        allowed_updates=["message", "callback_query"]
+    )
+    print("Yangi to'g'rilangan Webhook ishga tushdi!")
     
     threading.Thread(target=test_sending_loop, daemon=True).start()
     
