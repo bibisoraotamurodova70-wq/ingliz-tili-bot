@@ -68,7 +68,7 @@ def get_random_word():
         if response.status_code == 200: return response.json()[0].capitalize()
     except: return None
 
-# 3. TUGMALAR ISHLOVCHISI (VAQT CHEKLOVISIZ)
+# 3. TUGMALAR ISHLOVCHISI
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     conn = None
@@ -83,22 +83,18 @@ def handle_answer(call):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # 1. Foydalanuvchi bu testni oldin bosganmi tekshiramiz
         cursor.execute("SELECT 1 FROM solved_tests WHERE user_id = ? AND message_id = ?", (user_id, message_id))
         if cursor.fetchone():
             bot.answer_callback_query(call.id, "⚠️ Siz bu testga javob berib bo'lgansiz! Faqat 1 marta urinish mumkin.", show_alert=True)
             return
             
-        # 2. Test bazada mavjudligini tekshiramiz
         cursor.execute("SELECT correct_answer FROM active_tests WHERE message_id = ?", (message_id,))
         row = cursor.fetchone()
         if not row:
-            bot.answer_callback_query(call.id, "⚠️ Bu test eskirgan yoki bazadan o'chirilgan!")
+            bot.answer_callback_query(call.id, "⚠️ Bu test eskirgan yoki topilmadi!", show_alert=True)
             return
             
         correct_answer = row[0]
-        
-        # Urinishni srazu yopamiz (qayta bosa olmaydi)
         cursor.execute("INSERT INTO solved_tests (user_id, message_id) VALUES (?, ?)", (user_id, message_id))
         conn.commit()
         
@@ -118,13 +114,13 @@ def send_leaderboard(message):
     try: bot.reply_to(message, get_leaderboard_text(), parse_mode="Markdown")
     except Exception as e: print(f"Reyting xatosi: {e}")
 
-# 5. TEST TSIKLI (VAQTSIDAN TOZA HOLATDA)
+# 5. TEST TSIKLI
 def test_sending_loop():
     global IS_LOOP_RUNNING
     if IS_LOOP_RUNNING: return
     IS_LOOP_RUNNING = True
     
-    time.sleep(10)
+    time.sleep(15)
     test_counter = 0
     while True:
         try:
@@ -141,7 +137,6 @@ def test_sending_loop():
             markup = InlineKeyboardMarkup(row_width=2)
             markup.add(*[InlineKeyboardButton(text=opt.capitalize(), callback_data=f"ans_{opt}") for opt in options])
             
-            # Matndan vaqt haqidagi barcha yozuvlarni olib tashladik
             msg = bot.send_message(
                 chat_id=GROUP_CHAT_ID, 
                 text=f"🇬🇧 **{word}** — so'zining to'g'ri tarjimasini toping:", 
@@ -166,12 +161,19 @@ def test_sending_loop():
             time.sleep(60)
         except Exception as e: time.sleep(15)
 
-# 6. ISHGA TUSHIRISH
+# 6. ISHGA TUSHIRISH (ESKI WEBHOOKNI TOZALASH REJIMIDA)
 if __name__ == "__main__":
-    try: requests.get(f"https://api.telegram.org/bot{API_TOKEN}/deleteWebhook?drop_pending_updates=true")
-    except: pass
+    # Telegram tizimidan eski webhookni majburlab butunlay o'chiramiz va eski so'rovlarni tozalaymiz
+    try:
+        print("Eski Webhook o'chirilmoqda...")
+        bot.remove_webhook()
+        requests.get(f"https://api.telegram.org/bot{API_TOKEN}/deleteWebhook?drop_pending_updates=true")
+    except Exception as e:
+        print(f"Webhook tozalashda xato: {e}")
+    
     time.sleep(2)
     
+    # Test oqimini yoqish
     threading.Thread(target=test_sending_loop, daemon=True).start()
-    print("Bot vaqt cheklovlarisiz ishga tushdi...")
+    print("Bot muvaffaqiyatli toza rejimda ishga tushdi...")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
