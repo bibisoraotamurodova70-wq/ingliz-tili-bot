@@ -1,17 +1,22 @@
-import os, sqlite3, threading, time, random, requests, telebot
-from flask import Flask, request
+import os
+import sqlite3
+import threading
+import time
+import random
+import requests
+import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from deep_translator import GoogleTranslator
 
+# 1. PARAMETRLAR
 API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
 GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   
-RENDER_URL = "https://ingiliz-tili-bot-ypms.onrender.com" 
 
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
-app = Flask(__name__)
 DB_FILE = "bot_database.db"
 
+# 2. BAZANI SOZLASH
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -61,18 +66,7 @@ def get_random_word():
         if response.status_code == 200: return response.json()[0].capitalize()
     except: return None
 
-@app.route("/", methods=['POST', 'GET'])
-def index():
-    if request.method == 'POST':
-        try:
-            if request.headers.get('content-type') == 'application/json':
-                json_string = request.get_data().decode('utf-8')
-                update = telebot.types.Update.de_json(json_string)
-                bot.process_new_updates([update])
-        except Exception as e: print(f"Webhook xatosi: {e}")
-        return "!", 200
-    return "Bot universal rejimda faol!", 200
-
+# 3. TUGMALAR ISHLOVCHISI
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     conn = None
@@ -108,13 +102,15 @@ def handle_answer(call):
     finally:
         if conn: conn.close()
 
+# 4. REYTING BUYRUG'I
 @bot.message_handler(commands=['reyting'])
 def send_leaderboard(message):
     try: bot.reply_to(message, get_leaderboard_text(), parse_mode="Markdown")
     except Exception as e: print(f"Reyting xatosi: {e}")
 
+# 5. TEST TSIKLI (1 DAQIQA)
 def test_sending_loop():
-    time.sleep(5)
+    time.sleep(10)
     test_counter = 0
     while True:
         try:
@@ -150,9 +146,14 @@ def test_sending_loop():
             time.sleep(60)
         except Exception as e: time.sleep(15)
 
+# 6. ISHGA TUSHIRISH (Portlarsiz va mutlaqo toza)
 if __name__ == "__main__":
-    bot.remove_webhook()
-    time.sleep(1)
-    bot.set_webhook(url=f"{RENDER_URL}/", allowed_updates=["message", "callback_query"])
+    try:
+        requests.get(f"https://api.telegram.org/bot{API_TOKEN}/deleteWebhook?drop_pending_updates=true")
+    except:
+        pass
+    time.sleep(2)
+    
     threading.Thread(target=test_sending_loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    print("Bot polling tizimida muvaffaqiyatli ishga tushdi...")
+    bot.infinity_polling(allowed_updates=["message", "callback_query"])
