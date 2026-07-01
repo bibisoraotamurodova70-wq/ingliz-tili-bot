@@ -29,9 +29,9 @@ def run_health_server():
     server.serve_forever()
 
 # ==========================================
-# 1. BOT SOZLAMALARI
+# 1. BOT SOZLAMALARI (YANGI TOKEN)
 # ==========================================
-API_TOKEN = '8629414647:AAHUlQNffYLXZHxeV_P4Ut3tpUlpfPyMUlo'
+API_TOKEN = '8629414647:AAHDwvOBAWAIGFIbJJpJIqn9Wgw1Tfczq1Q'
 GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   
 
 bot = telebot.TeleBot(API_TOKEN)
@@ -47,9 +47,7 @@ def init_db():
     cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, score INTEGER DEFAULT 0)')
     cursor.execute('CREATE TABLE IF NOT EXISTS active_tests (message_id INTEGER PRIMARY KEY, correct_answer TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS solved_tests (user_id INTEGER, message_id INTEGER, PRIMARY KEY (user_id, message_id))')
-    # Yangi oqimlarni bloklash uchun maxsus sozlama jadvali
     cursor.execute('CREATE TABLE IF NOT EXISTS bot_status (key TEXT PRIMARY KEY, value TEXT)')
-    # Har safar bot noldan yonganda eski qulfni ochamiz
     cursor.execute("INSERT OR REPLACE INTO bot_status (key, value) VALUES ('is_loop_running', 'false')")
     conn.commit()
     conn.close()
@@ -57,7 +55,6 @@ def init_db():
 init_db()
 
 def is_loop_already_running():
-    """Bazada tsikl ishlayotganini tekshirish"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM bot_status WHERE key = 'is_loop_running'")
@@ -66,7 +63,6 @@ def is_loop_already_running():
     return row and row[0] == 'true'
 
 def set_loop_status(status_str):
-    """Tsikl holatini o'zgartirish ('true' yoki 'false')"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO bot_status (key, value) VALUES ('is_loop_running', ?)", (status_str,))
@@ -178,7 +174,6 @@ def send_leaderboard(message):
 # 6. TEST GENERATOR TSIKLI
 # ==========================================
 def test_sending_loop():
-    # Agar orqa fonda ALLAQACHON bitta tsikl ishlayotgan bo'lsa, yangisini umuman yoqtirmaymiz!
     if is_loop_running_mem:
         print("Bloklandi: Parallel tsikl ochilishining oldi olindi.")
         return
@@ -193,7 +188,6 @@ def test_sending_loop():
     test_counter = 0
     while True:
         try:
-            # Har safar tsikl boshida faqat bitta faol oqim qolganini tekshiramiz
             word = get_random_word()
             if not word:
                 time.sleep(10)
@@ -258,10 +252,8 @@ if __name__ == "__main__":
     time.sleep(2)
     
     threading.Thread(target=run_health_server, daemon=True).start()
-    
-    # Faqat bitta tsikl ishlashini kafolatlaymiz
     threading.Thread(target=test_sending_loop, daemon=True).start()
     is_loop_running_mem = True
     
-    print("Xavfsiz bot ishga tushmoqda...")
+    print("Yangi token bilan toza bot ishga tushmoqda...")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
