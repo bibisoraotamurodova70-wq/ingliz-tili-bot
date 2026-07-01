@@ -7,18 +7,42 @@ import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from deep_translator import GoogleTranslator
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# 1. PARAMETRLAR
-API_TOKEN = '8972113004:AAHhJnR6bODO7-CpYqAnFXwrtiiyWR2x7Io'
+# ==========================================
+# 0. RENDER UCHUN YOLG'ONCHI VEB-SERVER
+# ==========================================
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+
+    def log_message(self, format, *args):
+        return
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"Fake server {port}-portda ishga tushdi...")
+    server.serve_forever()
+
+# ==========================================
+# 1. BOT SOZLAMALARI
+# ==========================================
+API_TOKEN = '8629414647:AAHUlQNffYLXZHxeV_P4Ut3tpUlpfPyMUlo'
 GROUP_CHAT_ID = '@testlar_bazasi_ingiliz'   
 
 bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
-DB_FILE = "bot_database.db"
+DB_FILE = "clean_database.db"  
 
 IS_LOOP_RUNNING = False
 
-# 2. BAZANI SOZLASH
+# ==========================================
+# 2. MA'LUMOTLAR BAZASI
+# ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -60,6 +84,19 @@ def get_leaderboard_text():
         leaderboard_text += f"{place_text}: {name} — {score} ball\n"
     return leaderboard_text
 
+def clear_turnir_data():
+    """Yangi turnir uchun reyting va eski testlarni tozalash"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users")          # Ballarni nollash
+    cursor.execute("DELETE FROM active_tests")    # Eski testlarni o'chirish
+    cursor.execute("DELETE FROM solved_tests")    # Urinishlarni o'chirish
+    conn.commit()
+    conn.close()
+
+# ==========================================
+# 3. TEST PARAMETRLARI
+# ==========================================
 fake_answers = ["olma", "kitob", "uy", "mashina", "yugurmoq", "baxtli", "sovuq", "issiq", "suv", "non", "shahar", "stul", "stol", "deraza", "eshik", "maktab", "ruchka", "daftar", "telefon", "kompyuter", "soat"]
 
 def get_random_word():
@@ -68,7 +105,9 @@ def get_random_word():
         if response.status_code == 200: return response.json()[0].capitalize()
     except: return None
 
-# 3. TUGMALAR ISHLOVCHISI
+# ==========================================
+# 4. TUGMALAR ISHLASHI
+# ==========================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ans_"))
 def handle_answer(call):
     conn = None
@@ -91,7 +130,7 @@ def handle_answer(call):
         cursor.execute("SELECT correct_answer FROM active_tests WHERE message_id = ?", (message_id,))
         row = cursor.fetchone()
         if not row:
-            bot.answer_callback_query(call.id, "⚠️ Bu test eskirgan yoki topilmadi!", show_alert=True)
+            bot.answer_callback_query(call.id, "⚠️ Bu test topilmadi yoki turnir tugagan!", show_alert=True)
             return
             
         correct_answer = row[0]
@@ -104,23 +143,28 @@ def handle_answer(call):
         else:
             bot.answer_callback_query(call.id, f"❌ Noto'g'ri javob! To'g'ri tarjima: {correct_answer.capitalize()} edi.", show_alert=True)
             
-    except Exception as e: print(f"Callback xatosi: {e}")
+    except Exception as e: print(f"Tugma xatosi: {e}")
     finally:
         if conn: conn.close()
 
-# 4. REYTING BUYRUG'I
+# ==========================================
+# 5. REYTING BUYRUG'I
+# ==========================================
 @bot.message_handler(commands=['reyting'])
 def send_leaderboard(message):
-    try: bot.reply_to(message, get_leaderboard_text(), parse_mode="Markdown")
-    except Exception as e: print(f"Reyting xatosi: {e}")
+    try: 
+        bot.reply_to(message, get_leaderboard_text(), parse_mode="Markdown")
+    except Exception as e: print(f"Reyting buyrug'i xatosi: {e}")
 
-# 5. TEST TSIKLI
+# ==========================================
+# 6. TEST GENERATOR TSIKLI
+# ==========================================
 def test_sending_loop():
     global IS_LOOP_RUNNING
     if IS_LOOP_RUNNING: return
     IS_LOOP_RUNNING = True
     
-    time.sleep(15)
+    time.sleep(10)
     test_counter = 0
     while True:
         try:
@@ -152,28 +196,43 @@ def test_sending_loop():
             
             test_counter += 1
             if test_counter >= 30:
-                time.sleep(30)
-                bot.send_message(GROUP_CHAT_ID, "🔔 **30 ta test yakunlandi!**\n\n" + get_leaderboard_text(), parse_mode="Markdown")
+                time.sleep(5)
+                
+                # Turnir yakuni va yakuniy reyting matni
+                tanaffus_matni = (
+                    f"🔔 **30 ta testdan iborat turnir yakunlandi!**\n\n"
+                    f"{get_leaderboard_text()}\n"
+                    f"⏳ **Navbatdagi yangi turnir 15 daqiqadan so'ng boshlanadi.** "
+                    f"Unga qadar ballar yangilanadi va hamma 0 balldan toza start oladi! 🧠"
+                )
+                
+                bot.send_message(GROUP_CHAT_ID, tanaffus_matni, parse_mode="Markdown")
+                
+                # Yangi turnirga tayyorgarlik: bazani tozalash va hisoblagichni nollash
+                clear_turnir_data()
                 test_counter = 0
-                time.sleep(900)
+                
+                time.sleep(900)  # 15 daqiqa kutish
+                
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk savollar yo'lda...**")
                 continue
-            time.sleep(60)
+                
+            time.sleep(60)  
         except Exception as e: time.sleep(15)
 
-# 6. ISHGA TUSHIRISH (ESKI WEBHOOKNI TOZALASH REJIMIDA)
+# ==========================================
+# 7. ISHGA TUSHIRISH
+# ==========================================
 if __name__ == "__main__":
-    # Telegram tizimidan eski webhookni majburlab butunlay o'chiramiz va eski so'rovlarni tozalaymiz
     try:
-        print("Eski Webhook o'chirilmoqda...")
-        bot.remove_webhook()
+        bot.remove_webhook()  
         requests.get(f"https://api.telegram.org/bot{API_TOKEN}/deleteWebhook?drop_pending_updates=true")
-    except Exception as e:
-        print(f"Webhook tozalashda xato: {e}")
+    except: pass
     
     time.sleep(2)
     
-    # Test oqimini yoqish
+    threading.Thread(target=run_health_server, daemon=True).start()
     threading.Thread(target=test_sending_loop, daemon=True).start()
-    print("Bot muvaffaqiyatli toza rejimda ishga tushdi...")
+    
+    print("Yangi bot 0 dan toza holatda ishga tushmoqda...")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
