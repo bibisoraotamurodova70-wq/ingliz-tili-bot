@@ -38,10 +38,8 @@ bot = telebot.TeleBot(API_TOKEN)
 translator = GoogleTranslator(source='en', target='uz')
 DB_FILE = "clean_database.db"  
 
-IS_LOOP_RUNNING = False
-
 # ==========================================
-# 2. MA'LUMOTLAR BAZASI
+# 2. MA'LUMOTLAR BAZASI VA LOCK TIZIMI
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -49,10 +47,31 @@ def init_db():
     cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, score INTEGER DEFAULT 0)')
     cursor.execute('CREATE TABLE IF NOT EXISTS active_tests (message_id INTEGER PRIMARY KEY, correct_answer TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS solved_tests (user_id INTEGER, message_id INTEGER, PRIMARY KEY (user_id, message_id))')
+    # Yangi oqimlarni bloklash uchun maxsus sozlama jadvali
+    cursor.execute('CREATE TABLE IF NOT EXISTS bot_status (key TEXT PRIMARY KEY, value TEXT)')
+    # Har safar bot noldan yonganda eski qulfni ochamiz
+    cursor.execute("INSERT OR REPLACE INTO bot_status (key, value) VALUES ('is_loop_running', 'false')")
     conn.commit()
     conn.close()
 
 init_db()
+
+def is_loop_already_running():
+    """Bazada tsikl ishlayotganini tekshirish"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM bot_status WHERE key = 'is_loop_running'")
+    row = cursor.fetchone()
+    conn.close()
+    return row and row[0] == 'true'
+
+def set_loop_status(status_str):
+    """Tsikl holatini o'zgartirish ('true' yoki 'false')"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO bot_status (key, value) VALUES ('is_loop_running', ?)", (status_str,))
+    conn.commit()
+    conn.close()
 
 def add_score(user_id, name):
     conn = sqlite3.connect(DB_FILE)
@@ -85,12 +104,11 @@ def get_leaderboard_text():
     return leaderboard_text
 
 def clear_turnir_data():
-    """Yangi turnir uchun reyting va eski testlarni tozalash"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users")          # Ballarni nollash
-    cursor.execute("DELETE FROM active_tests")    # Eski testlarni o'chirish
-    cursor.execute("DELETE FROM solved_tests")    # Urinishlarni o'chirish
+    cursor.execute("DELETE FROM users")          
+    cursor.execute("DELETE FROM active_tests")    
+    cursor.execute("DELETE FROM solved_tests")    
     conn.commit()
     conn.close()
 
@@ -160,14 +178,22 @@ def send_leaderboard(message):
 # 6. TEST GENERATOR TSIKLI
 # ==========================================
 def test_sending_loop():
-    global IS_LOOP_RUNNING
-    if IS_LOOP_RUNNING: return
-    IS_LOOP_RUNNING = True
+    # Agar orqa fonda ALLAQACHON bitta tsikl ishlayotgan bo'lsa, yangisini umuman yoqtirmaymiz!
+    if is_loop_running_mem:
+        print("Bloklandi: Parallel tsikl ochilishining oldi olindi.")
+        return
+        
+    if is_loop_already_running():
+        print("Bloklandi: Ma'lumotlar bazasida tsikl allaqachon faol.")
+        return
+        
+    set_loop_status('true')
     
-    time.sleep(10)
+    time.sleep(5)
     test_counter = 0
     while True:
         try:
+            # Har safar tsikl boshida faqat bitta faol oqim qolganini tekshiramiz
             word = get_random_word()
             if not word:
                 time.sleep(10)
@@ -198,7 +224,6 @@ def test_sending_loop():
             if test_counter >= 30:
                 time.sleep(5)
                 
-                # Turnir yakuni va yakuniy reyting matni
                 tanaffus_matni = (
                     f"🔔 **30 ta testdan iborat turnir yakunlandi!**\n\n"
                     f"{get_leaderboard_text()}\n"
@@ -208,11 +233,10 @@ def test_sending_loop():
                 
                 bot.send_message(GROUP_CHAT_ID, tanaffus_matni, parse_mode="Markdown")
                 
-                # Yangi turnirga tayyorgarlik: bazani tozalash va hisoblagichni nollash
                 clear_turnir_data()
                 test_counter = 0
                 
-                time.sleep(900)  # 15 daqiqa kutish
+                time.sleep(900)  
                 
                 bot.send_message(GROUP_CHAT_ID, "🚀 **Yangi turnir boshlandi! Ilk savollar yo'lda...**")
                 continue
@@ -223,6 +247,8 @@ def test_sending_loop():
 # ==========================================
 # 7. ISHGA TUSHIRISH
 # ==========================================
+is_loop_running_mem = False
+
 if __name__ == "__main__":
     try:
         bot.remove_webhook()  
@@ -232,7 +258,10 @@ if __name__ == "__main__":
     time.sleep(2)
     
     threading.Thread(target=run_health_server, daemon=True).start()
-    threading.Thread(target=test_sending_loop, daemon=True).start()
     
-    print("Yangi bot 0 dan toza holatda ishga tushmoqda...")
+    # Faqat bitta tsikl ishlashini kafolatlaymiz
+    threading.Thread(target=test_sending_loop, daemon=True).start()
+    is_loop_running_mem = True
+    
+    print("Xavfsiz bot ishga tushmoqda...")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
